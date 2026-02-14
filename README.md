@@ -21,6 +21,24 @@ Telegram message editing and push management tool.
 
 **Location:** `telegram-editor/`
 
+**Configuration:**
+
+敏感信息（Token、用户ID）可通过以下方式配置（优先级从高到低）：
+
+1. **环境变量**（最安全，推荐用于服务器）
+   ```bash
+   export TELEGRAM_BOT_TOKEN="your_bot_token"
+   export TELEGRAM_DEFAULT_CHANNEL="@your_channel"
+   export TELEGRAM_ADMIN_USERS="123456789,987654321"
+   ```
+
+2. **本地配置文件**（推荐用于开发）
+   - 复制 `config.local.yaml` 并填入真实信息
+   - 此文件已被 `.gitignore` 保护，不会被提交
+
+3. **主配置文件**（不推荐，仅用于非敏感配置）
+   - 修改 `config.yaml` 中的非敏感设置
+
 ### rclone 📁
 Comprehensive rclone control for MinIO and cloud storage operations.
 

@@ -1,9 +1,21 @@
 # Telegram Editor 配置文件
+# [示例配置 - 可安全提交到 GitHub]
+# 
+# 敏感信息（Token、用户ID等）请放入 config.local.yaml
+# config.local.yaml 已被 .gitignore 保护，不会被提交
 
 bot:
-  token: ""  # 您的 Telegram Bot Token
-  default_channel: ""  # 默认推送频道/群组
-  admin_users: []  # 管理员用户ID列表
+  # [安全提示] Token 请使用以下方式之一配置：
+  # 1. 写入 config.local.yaml 文件（推荐）
+  # 2. 设置环境变量: TELEGRAM_BOT_TOKEN
+  token: ""  
+  
+  # 默认推送频道/群组（如 @mychannel）
+  default_channel: "" 
+  
+  # 管理员用户ID列表（只允许这些用户）
+  # [安全提示] 填入 config.local.yaml 或环境变量 TELEGRAM_ADMIN_USERS
+  admin_users: []
 
 editor:
   auto_save: true

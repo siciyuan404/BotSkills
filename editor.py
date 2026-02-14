@@ -88,22 +88,61 @@ class TelegramEditor:
             self._init_bot()
     
     def _load_config(self, path: str) -> Dict:
-        """加载配置文件"""
+        """加载配置文件（支持本地配置文件和环境变量）"""
         default_config = {
-            'bot': {'token': '', 'default_channel': ''},
+            'bot': {'token': '', 'default_channel': '', 'admin_users': []},
             'editor': {'auto_save': True, 'max_history': 50},
             'templates': {'enabled': True}
         }
         
+        config = default_config.copy()
+        
+        # 1. 加载主配置文件
         if os.path.exists(path):
             try:
                 with open(path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-                    return {**default_config, **config}
+                    main_config = yaml.safe_load(f)
+                    if main_config:
+                        config.update(main_config)
             except Exception as e:
-                logger.error(f"加载配置失败: {e}")
+                logger.error(f"加载主配置失败: {e}")
         
-        return default_config
+        # 2. 加载本地配置文件（config.local.yaml - 不提交到 GitHub）
+        local_config_path = path.replace('.yaml', '.local.yaml').replace('.yml', '.local.yml')
+        if os.path.exists(local_config_path):
+            try:
+                with open(local_config_path, 'r', encoding='utf-8') as f:
+                    local_config = yaml.safe_load(f)
+                    if local_config:
+                        # 合并本地配置（优先）
+                        if 'bot' in local_config:
+                            config['bot'].update(local_config['bot'])
+                        if 'editor' in local_config:
+                            config['editor'].update(local_config['editor'])
+                        logger.info(f"已加载本地配置: {local_config_path}")
+            except Exception as e:
+                logger.error(f"加载本地配置失败: {e}")
+        
+        # 3. 从环境变量读取敏感信息（最高优先级）
+        env_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        if env_token:
+            config['bot']['token'] = env_token
+            logger.info("已从环境变量读取 Bot Token")
+        
+        env_channel = os.getenv('TELEGRAM_DEFAULT_CHANNEL')
+        if env_channel:
+            config['bot']['default_channel'] = env_channel
+        
+        env_admins = os.getenv('TELEGRAM_ADMIN_USERS')
+        if env_admins:
+            # 支持逗号分隔的用户ID，如: "123456,789012"
+            try:
+                admin_list = [int(x.strip()) for x in env_admins.split(',') if x.strip()]
+                config['bot']['admin_users'] = admin_list
+            except ValueError:
+                logger.warning("环境变量 TELEGRAM_ADMIN_USERS 格式错误，应为逗号分隔的数字")
+        
+        return config
     
     def _load_templates(self):
         """加载模板文件"""
