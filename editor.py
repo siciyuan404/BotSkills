@@ -513,7 +513,12 @@ class TelegramEditor:
     
     def run_cli(self):
         """命令行模式（无需 Bot Token）"""
-        print("📝 Telegram Editor CLI 模式")
+        # 设置 stdout 编码
+        import sys
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        
+        print("[Telegram Editor CLI 模式]")
         print("=" * 50)
         print("命令: new, preview, save, drafts, templates, send, quit")
         print("=" * 50)
@@ -534,7 +539,7 @@ class TelegramEditor:
                         updated_at=datetime.now().isoformat(),
                         tags=[]
                     )
-                    print(f"✅ 已创建草稿 (ID: {self.current_draft.id})")
+                    print(f"[OK] 已创建草稿 (ID: {self.current_draft.id})")
                 
                 elif cmd == "preview":
                     if self.current_draft:
@@ -542,7 +547,7 @@ class TelegramEditor:
                         print(self.current_draft.content)
                         print(f"{'='*50}")
                     else:
-                        print("❌ 没有当前草稿")
+                        print("[X] 没有当前草稿")
                 
                 elif cmd == "save":
                     if self.current_draft:
@@ -553,20 +558,20 @@ class TelegramEditor:
                         else:
                             self.drafts.append(self.current_draft)
                         self._save_drafts()
-                        print("✅ 草稿已保存")
+                        print("[OK] 草稿已保存")
                     else:
-                        print("❌ 没有可保存的内容")
+                        print("[X] 没有可保存的内容")
                 
                 elif cmd == "drafts":
                     if self.drafts:
                         for d in self.drafts[-5:]:
-                            print(f"• {d.id}: {d.content[:50]}...")
+                            print(f"* {d.id}: {d.content[:50]}...")
                     else:
-                        print("📭 没有草稿")
+                        print("[空] 没有草稿")
                 
                 elif cmd == "templates":
                     for t in self.templates.get('templates', []):
-                        print(f"• {t['id']}: {t['name']}")
+                        print(f"* {t['id']}: {t['name']}")
                 
                 elif cmd == "send":
                     print("CLI 模式不支持发送，请使用 Bot 模式")
@@ -579,7 +584,7 @@ class TelegramEditor:
             except Exception as e:
                 print(f"错误: {e}")
         
-        print("\n👋 再见!")
+        print("\n再见!")
 
 
 def main():
