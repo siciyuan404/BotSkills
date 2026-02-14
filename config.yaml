@@ -1,0 +1,30 @@
+# Telegram Editor 配置文件
+
+bot:
+  token: ""  # 您的 Telegram Bot Token
+  default_channel: ""  # 默认推送频道/群组
+  admin_users: []  # 管理员用户ID列表
+
+editor:
+  auto_save: true
+  auto_save_interval: 30  # 自动保存间隔（秒）
+  max_history: 50  # 最大历史记录数
+  default_parse_mode: "MarkdownV2"  # 默认解析模式：MarkdownV2, HTML, Markdown
+
+templates:
+  enabled: true
+  default_category: "general"
+  categories:
+    - general
+    - announcement
+    - notification
+    - marketing
+
+storage:
+  draft_file: "drafts.json"
+  history_file: "history.json"
+  templates_file: "templates.json"
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "editor.log"

@@ -1,0 +1,45 @@
+{
+  "templates": [
+    {
+      "id": "welcome",
+      "name": "欢迎消息",
+      "category": "general",
+      "content": "👋 *欢迎使用*\n\n感谢您加入我们的频道！\n\n📢 这里将发布最新资讯\n💬 欢迎留言交流\n\n如有问题请联系管理员。",
+      "description": "新用户加入时的欢迎消息"
+    },
+    {
+      "id": "announcement",
+      "name": "公告通知",
+      "category": "announcement",
+      "content": "📢 *重要公告*\n\n{type}\n\n{content}\n\n⏰ 发布时间：{time}\n📌 请留意后续更新",
+      "variables": ["type", "content", "time"],
+      "description": "通用公告模板"
+    },
+    {
+      "id": "update",
+      "name": "更新通知",
+      "category": "notification",
+      "content": "🔄 *版本更新*\n\n版本：*{version}*\n\n🆕 新功能：\n{features}\n\n🐛 修复：\n{fixes}\n\n⬇️ [点击下载]({download_link})",
+      "variables": ["version", "features", "fixes", "download_link"],
+      "description": "软件/产品更新通知"
+    },
+    {
+      "id": "event",
+      "name": "活动推广",
+      "category": "marketing",
+      "content": "🎉 *特别活动*\n\n*{event_name}*\n\n📅 时间：{time}\n📍 地点：{location}\n\n{description}\n\n✅ [立即参与]({link})",
+      "variables": ["event_name", "time", "location", "description", "link"],
+      "description": "活动/促销推广"
+    },
+    {
+      "id": "daily_report",
+      "name": "日报",
+      "category": "general",
+      "content": "📊 *{date} 日报*\n\n📈 数据统计：\n{stats}\n\n✅ 完成任务：\n{completed}\n\n📝 明日计划：\n{plans}",
+      "variables": ["date", "stats", "completed", "plans"],
+      "description": "每日工作报告"
+    }
+  ],
+  "version": "1.0.0",
+  "last_updated": "2026-02-14"
+}
