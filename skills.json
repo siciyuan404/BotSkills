@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "updated": "2026-06-25T11:54:35.051675+00:00",
+  "skills": [
+    {
+      "name": "flutter-gh-starter",
+      "description": "Primary skill for bootstrapping a Flutter mobile project and managing it as an open-source GitHub repository via gh CLI. Activate when the user wants to create a Flutter app, set up Flutter/gh CLI environment, initialize a git repository, configure open-source files (LICENSE/README/.gitignore), or push code to GitHub. Provides environment provisioning (China mirror aware), project scaffolding, env-var (.env + flutter_dotenv) integration, and sub-scenario routing to specialized references in the references/ directory.",
+      "path": "flutter-gh-starter/",
+      "dependencies": []
+    },
+    {
+      "name": "rclone",
+      "description": "Comprehensive rclone control for MinIO and cloud storage operations. Use when the agent needs to: (1) Manage MinIO buckets and objects, (2) Upload/download/sync files, (3) List and browse cloud storage, (4) Configure rclone remotes including encryption and sharing settings, (5) Generate time-limited share links, (6) Modify bucket permissions and access controls. Supports MinIO, S3, and other rclone-compatible storage backends.",
+      "path": "rclone/",
+      "dependencies": []
+    },
+    {
+      "name": "telegram-editor",
+      "description": "Telegram Bot message editing and push management skill. Provides capabilities for editing message content, previewing messages before sending, managing message templates, and pushing messages to Telegram channels or groups.",
+      "path": "telegram-editor/",
+      "dependencies": []
+    }
+  ]
+}
