@@ -1,6 +1,6 @@
 ---
 name: rclone
-description: Comprehensive rclone control for MinIO and cloud storage operations. Use when the agent needs to: (1) Manage MinIO buckets and objects, (2) Upload/download/sync files, (3) List and browse cloud storage, (4) Configure rclone remotes including encryption and sharing settings, (5) Generate time-limited share links, (6) Modify bucket permissions and access controls. Supports MinIO, S3, and other rclone-compatible storage backends.
+description: "Comprehensive rclone control for MinIO and cloud storage operations. Use when the agent needs to: (1) Manage MinIO buckets and objects, (2) Upload/download/sync files, (3) List and browse cloud storage, (4) Configure rclone remotes including encryption and sharing settings, (5) Generate time-limited share links, (6) Modify bucket permissions and access controls. Supports MinIO, S3, and other rclone-compatible storage backends."
 ---
 
 # Rclone Control
