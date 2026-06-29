@@ -5,6 +5,7 @@
       "name": "欢迎消息",
       "category": "general",
       "content": "👋 *欢迎使用*\n\n感谢您加入我们的频道！\n\n📢 这里将发布最新资讯\n💬 欢迎留言交流\n\n如有问题请联系管理员。",
+      "variables": [],
       "description": "新用户加入时的欢迎消息"
     },
     {

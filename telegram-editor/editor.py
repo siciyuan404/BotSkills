@@ -12,7 +12,7 @@ import re
 import yaml
 from datetime import datetime
 from typing import Optional, Dict, List, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 
 # 尝试导入 telegram bot 库
 try:
@@ -27,12 +27,9 @@ except ImportError:
     print("警告: python-telegram-bot 未安装，运行: pip install python-telegram-bot")
 
 
-# 配置日志
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# 配置日志：作为库时不污染 root logger，具体配置在 TelegramEditor 中按 config.yaml 应用
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 @dataclass
@@ -50,7 +47,9 @@ class MessageDraft:
     
     @classmethod
     def from_dict(cls, data: Dict) -> 'MessageDraft':
-        return cls(**data)
+        # 仅读取已知字段，避免历史数据含未知字段时 TypeError
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 @dataclass
@@ -63,20 +62,42 @@ class MessageHistory:
     status: str  # sent, failed
     error_msg: Optional[str] = None
 
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'MessageHistory':
+        # 仅读取已知字段，保持与 MessageDraft 一致的健壮性
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
 
 class TelegramEditor:
     """Telegram 消息编辑器主类"""
-    
+
     # 对话状态
     EDITING, PREVIEWING, SELECTING_TEMPLATE, SENDING = range(4)
+
+    # MarkdownV2 中需要转义的特殊字符
+    _MDV2_ESCAPE_CHARS = r"_*[]()~`>#+-=|{}.!"
+
+    @staticmethod
+    def escape_markdown_v2(text: str) -> str:
+        """转义 MarkdownV2 特殊字符，用于纯文本片段。
+
+        注意：仅对非格式片段使用，不要对包含格式语法（如 *bold*）的整段文本使用，
+        否则会破坏用户编写的格式。
+        """
+        return re.sub(f"([{re.escape(TelegramEditor._MDV2_ESCAPE_CHARS)}])", r"\\\1", text)
     
     def __init__(self, config_path: str = "config.yaml"):
         self.config = self._load_config(config_path)
+        self._configure_logging()
         self.drafts: List[MessageDraft] = []
         self.history: List[MessageHistory] = []
         self.templates: Dict = {}
         self.current_draft: Optional[MessageDraft] = None
-        
+
         # 加载数据
         self._load_templates()
         self._load_drafts()
@@ -143,7 +164,26 @@ class TelegramEditor:
                 logger.warning("环境变量 TELEGRAM_ADMIN_USERS 格式错误，应为逗号分隔的数字")
         
         return config
-    
+
+    def _configure_logging(self):
+        """根据 config.yaml 的 logging 段配置本模块 logger，避免污染 root logger。"""
+        log_cfg = self.config.get('logging', {}) or {}
+        level_name = str(log_cfg.get('level', 'INFO')).upper()
+        logger.setLevel(getattr(logging, level_name, logging.INFO))
+
+        # 仅在首次配置时添加 handler，防止重复实例化导致重复输出
+        if getattr(logger, '_trae_configured', False):
+            return
+        fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_file = log_cfg.get('file')
+        if log_file:
+            handler: logging.Handler = logging.FileHandler(log_file, encoding='utf-8')
+        else:
+            handler = logging.StreamHandler()
+        handler.setFormatter(fmt)
+        logger.addHandler(handler)
+        logger._trae_configured = True  # type: ignore[attr-defined]
+
     def _load_templates(self):
         """加载模板文件"""
         templates_file = self.config.get('storage', {}).get('templates_file', 'templates.json')
@@ -177,7 +217,7 @@ class TelegramEditor:
             try:
                 with open(history_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.history = [MessageHistory(**h) for h in data.get('history', [])]
+                    self.history = [MessageHistory.from_dict(h) for h in data.get('history', [])]
                     logger.info(f"已加载 {len(self.history)} 条历史记录")
             except Exception as e:
                 logger.error(f"加载历史失败: {e}")
@@ -203,7 +243,7 @@ class TelegramEditor:
             
             with open(history_file, 'w', encoding='utf-8') as f:
                 json.dump({
-                    'history': [h.__dict__ for h in history_to_save]
+                    'history': [h.to_dict() for h in history_to_save]
                 }, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"保存历史失败: {e}")
@@ -244,7 +284,27 @@ class TelegramEditor:
         
         # 回调处理器
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
-    
+
+    # ==================== 权限校验 ====================
+
+    def _is_authorized(self, update: Update) -> bool:
+        """检查发起者是否在管理员列表内。未配置 admin_users 时放行所有人。"""
+        admins = self.config.get('bot', {}).get('admin_users') or []
+        if not admins:
+            return True
+        user = update.effective_user
+        return user is not None and user.id in admins
+
+    async def _deny_if_unauthorized(self, update: Update) -> bool:
+        """未授权时回复拒绝消息并返回 True，调用方应立即 return。"""
+        if self._is_authorized(update):
+            return False
+        if update.callback_query:
+            await update.callback_query.answer("⛔ 无权限", show_alert=True)
+        elif update.message:
+            await update.message.reply_text("⛔ 无权限：你不在此 Bot 的管理员列表中")
+        return True
+
     # ==================== 命令处理器 ====================
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,6 +356,8 @@ class TelegramEditor:
     
     async def cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/new 命令 - 创建新消息"""
+        if await self._deny_if_unauthorized(update):
+            return
         self.current_draft = None
         await update.message.reply_text(
             "✏️ *创建新消息*\n\n请直接发送消息内容，支持 Markdown 格式。",
@@ -304,6 +366,8 @@ class TelegramEditor:
     
     async def cmd_preview(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/preview 命令 - 预览消息"""
+        if await self._deny_if_unauthorized(update):
+            return
         if not self.current_draft:
             await update.message.reply_text("❌ 当前没有编辑中的消息，使用 /new 创建")
             return
@@ -311,7 +375,7 @@ class TelegramEditor:
         try:
             await update.message.reply_text(
                 f"👁 *预览消息*\n\n{self.current_draft.content}",
-                parse_mode=self.current_draft.parse_mode if self.current_draft.parse_mode != 'MarkdownV2' else None
+                parse_mode=self.current_draft.parse_mode
             )
         except Exception as e:
             await update.message.reply_text(
@@ -320,6 +384,8 @@ class TelegramEditor:
     
     async def cmd_save(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/save 命令 - 保存草稿"""
+        if await self._deny_if_unauthorized(update):
+            return
         if not self.current_draft:
             await update.message.reply_text("❌ 没有可保存的内容")
             return
@@ -337,6 +403,8 @@ class TelegramEditor:
     
     async def cmd_list_drafts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/drafts 命令 - 列出现有草稿"""
+        if await self._deny_if_unauthorized(update):
+            return
         if not self.drafts:
             await update.message.reply_text("📭 没有保存的草稿")
             return
@@ -360,6 +428,8 @@ class TelegramEditor:
     
     async def cmd_list_templates(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/templates 命令 - 列出模板"""
+        if await self._deny_if_unauthorized(update):
+            return
         templates = self.templates.get('templates', [])
         if not templates:
             await update.message.reply_text("📭 没有可用模板")
@@ -380,6 +450,8 @@ class TelegramEditor:
     
     async def cmd_send(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/send 命令 - 发送消息"""
+        if await self._deny_if_unauthorized(update):
+            return
         if not self.current_draft:
             await update.message.reply_text("❌ 没有可发送的消息，使用 /new 创建")
             return
@@ -402,7 +474,7 @@ class TelegramEditor:
             await context.bot.send_message(
                 chat_id=channel,
                 text=self.current_draft.content,
-                parse_mode=self.current_draft.parse_mode if self.current_draft.parse_mode != 'MarkdownV2' else None
+                parse_mode=self.current_draft.parse_mode
             )
             
             # 记录历史
@@ -424,6 +496,8 @@ class TelegramEditor:
     
     async def cmd_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/history 命令 - 查看发送历史"""
+        if await self._deny_if_unauthorized(update):
+            return
         if not self.history:
             await update.message.reply_text("📭 没有发送记录")
             return
@@ -438,11 +512,15 @@ class TelegramEditor:
     
     async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """/clear 命令 - 清空当前编辑"""
+        if await self._deny_if_unauthorized(update):
+            return
         self.current_draft = None
         await update.message.reply_text("🗑 当前编辑已清空")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理文本消息"""
+        if await self._deny_if_unauthorized(update):
+            return
         text = update.message.text
         
         # 创建或更新草稿
@@ -484,6 +562,8 @@ class TelegramEditor:
     
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理按钮回调"""
+        if await self._deny_if_unauthorized(update):
+            return
         query = update.callback_query
         await query.answer()
         
@@ -494,7 +574,7 @@ class TelegramEditor:
                 try:
                     await query.edit_message_text(
                         f"👁 *预览*\n\n{self.current_draft.content}",
-                        parse_mode=self.current_draft.parse_mode if self.current_draft.parse_mode != 'MarkdownV2' else None
+                        parse_mode=self.current_draft.parse_mode
                     )
                 except Exception as e:
                     await query.edit_message_text(f"预览错误: {str(e)}\n\n{self.current_draft.content}")
@@ -536,6 +616,204 @@ class TelegramEditor:
                     f"✅ 已加载草稿\n\n{draft.content[:300]}..."
                 )
     
+    # ==================== CLI 子命令 ====================
+
+    def _send_to_chat_sync(self, chat_id: str, text: str, parse_mode: Optional[str] = None):
+        """同步发送消息到指定 chat（CLI 模式使用），独立于 Bot polling。"""
+        import asyncio
+        token = self.config.get('bot', {}).get('token')
+        if not token:
+            raise RuntimeError("未配置 Bot Token，请在 config.local.yaml 或环境变量 TELEGRAM_BOT_TOKEN 中设置")
+        if not TELEGRAM_AVAILABLE:
+            raise RuntimeError("python-telegram-bot 未安装: pip install python-telegram-bot")
+
+        async def _run():
+            from telegram import Bot
+            bot = Bot(token)
+            await bot.initialize()
+            try:
+                return await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+            finally:
+                await bot.shutdown()
+        return asyncio.run(_run())
+
+    def _record_history(self, content: str, channel: str, status: str, error_msg: Optional[str] = None):
+        """记录一条发送历史并持久化。"""
+        self.history.append(MessageHistory(
+            id=f"hist_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            content=content,
+            channel=channel,
+            sent_at=datetime.now().isoformat(),
+            status=status,
+            error_msg=error_msg,
+        ))
+        self._save_history()
+
+    def cli_send(self, args) -> int:
+        """发送消息到单个 chat。"""
+        try:
+            self._send_to_chat_sync(args.chat_id, args.text, args.parse_mode)
+            self._record_history(args.text, args.chat_id, 'sent')
+            print(f"✅ 消息已发送到 {args.chat_id}")
+            return 0
+        except Exception as e:
+            self._record_history(args.text, args.chat_id, 'failed', str(e))
+            print(f"❌ 发送失败: {e}")
+            return 1
+
+    def cli_preview(self, args) -> int:
+        """本地预览消息内容（打印文本与解析模式）。"""
+        print("=" * 50)
+        print(f"解析模式: {args.parse_mode or '纯文本'}")
+        print("-" * 50)
+        print(args.text)
+        print("=" * 50)
+        return 0
+
+    def cli_draft(self, args) -> int:
+        """草稿管理: save / list / send。"""
+        action = args.draft_action
+        if action == 'save':
+            draft_id = args.name or f"draft_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            # 若已存在同名草稿则覆盖
+            self.drafts = [d for d in self.drafts if d.id != draft_id]
+            draft = MessageDraft(
+                id=draft_id,
+                content=args.text,
+                parse_mode=args.parse_mode or 'Markdown',
+                created_at=datetime.now().isoformat(),
+                updated_at=datetime.now().isoformat(),
+                tags=[],
+            )
+            self.drafts.append(draft)
+            self._save_drafts()
+            print(f"✅ 草稿已保存 (ID: {draft.id})")
+            return 0
+        elif action == 'list':
+            if not self.drafts:
+                print("📭 没有保存的草稿")
+                return 0
+            for d in self.drafts:
+                preview = d.content[:50] + ("..." if len(d.content) > 50 else "")
+                print(f"- {d.id} [{d.parse_mode}] {preview}")
+            return 0
+        elif action == 'send':
+            draft = next((d for d in self.drafts if d.id == args.name), None)
+            if not draft:
+                print(f"❌ 未找到草稿: {args.name}")
+                return 1
+            try:
+                self._send_to_chat_sync(args.chat_id, draft.content, draft.parse_mode)
+                self._record_history(draft.content, args.chat_id, 'sent')
+                print(f"✅ 草稿 {draft.id} 已发送到 {args.chat_id}")
+                return 0
+            except Exception as e:
+                self._record_history(draft.content, args.chat_id, 'failed', str(e))
+                print(f"❌ 发送失败: {e}")
+                return 1
+        print(f"❌ 未知 draft 子命令: {action}")
+        return 1
+
+    def cli_broadcast(self, args) -> int:
+        """向多个 chat 群发消息。"""
+        chat_ids = [c.strip() for c in args.chats.split(',') if c.strip()]
+        if not chat_ids:
+            print("❌ 未提供有效 chat id")
+            return 1
+        ok = 0
+        for cid in chat_ids:
+            try:
+                self._send_to_chat_sync(cid, args.text, args.parse_mode)
+                self._record_history(args.text, cid, 'sent')
+                print(f"✅ {cid}: 发送成功")
+                ok += 1
+            except Exception as e:
+                self._record_history(args.text, cid, 'failed', str(e))
+                print(f"❌ {cid}: {e}")
+        print(f"完成: {ok}/{len(chat_ids)} 成功")
+        return 0 if ok == len(chat_ids) else 1
+
+    def cli_schedule(self, args) -> int:
+        """在指定时间发送消息（阻塞等待至发送时刻，Ctrl+C 取消）。"""
+        import threading
+        try:
+            target = datetime.strptime(args.at, "%Y-%m-%d %H:%M")
+        except ValueError:
+            print("❌ 时间格式错误，应为 'YYYY-MM-DD HH:MM'")
+            return 1
+        delay = (target - datetime.now()).total_seconds()
+        if delay <= 0:
+            print("❌ 调度时间必须在未来")
+            return 1
+        print(f"⏳ 已调度，将在 {args.at} 发送到 {args.chat_id}（等待 {delay:.0f} 秒，Ctrl+C 取消）")
+        done = threading.Event()
+        result = {}
+
+        def _fire():
+            try:
+                self._send_to_chat_sync(args.chat_id, args.text, args.parse_mode)
+                result['ok'] = True
+            except Exception as e:
+                result['err'] = str(e)
+            finally:
+                done.set()
+
+        timer = threading.Timer(delay, _fire)
+        timer.start()
+        try:
+            done.wait()
+        except KeyboardInterrupt:
+            timer.cancel()
+            print("已取消")
+            return 1
+        if result.get('ok'):
+            self._record_history(args.text, args.chat_id, 'sent')
+            print("✅ 已发送")
+            return 0
+        self._record_history(args.text, args.chat_id, 'failed', result.get('err'))
+        print(f"❌ 发送失败: {result.get('err')}")
+        return 1
+
+    def cli_config(self, args) -> int:
+        """查看/修改配置。"""
+        if args.config_action == 'show':
+            bot_cfg = self.config.get('bot', {})
+            token = bot_cfg.get('token', '')
+            masked = (token[:4] + '***' + token[-4:]) if len(token) > 8 else ('***' if token else '(未设置)')
+            print(f"Bot Token: {masked}")
+            print(f"默认频道: {bot_cfg.get('default_channel') or '(未设置)'}")
+            admins = bot_cfg.get('admin_users') or []
+            print(f"管理员: {admins if admins else '(未限制)'}")
+            print(f"默认解析模式: {self.config.get('editor', {}).get('default_parse_mode', 'MarkdownV2')}")
+            return 0
+        elif args.config_action == 'set-token':
+            return self._write_local_config({'bot': {'token': args.value}})
+        elif args.config_action == 'set-default-chat':
+            return self._write_local_config({'bot': {'default_channel': args.value}})
+        print(f"❌ 未知 config 子命令: {args.config_action}")
+        return 1
+
+    def _write_local_config(self, patch: Dict) -> int:
+        """将补丁合并写入 config.local.yaml（不存在则创建）。"""
+        path = 'config.local.yaml'
+        data = {}
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f) or {}
+            except Exception as e:
+                print(f"⚠️ 读取 config.local.yaml 失败: {e}")
+        for k, v in patch.items():
+            data.setdefault(k, {}).update(v)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            print(f"✅ 已写入 {path}")
+            return 0
+        except Exception as e:
+            print(f"❌ 写入失败: {e}")
+            return 1
+
     def run(self):
         """运行 Bot"""
         if not TELEGRAM_AVAILABLE:
@@ -551,21 +829,16 @@ class TelegramEditor:
         self.application.run_polling()
     
     def run_cli(self):
-        """命令行模式（无需 Bot Token）"""
-        # 设置 stdout 编码
-        import sys
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        
+        """交互式命令行模式（无需启动 Bot polling）。"""
         print("[Telegram Editor CLI 模式]")
         print("=" * 50)
         print("命令: new, preview, save, drafts, templates, send, quit")
         print("=" * 50)
-        
+
         while True:
             try:
                 cmd = input("\n> ").strip().lower()
-                
+
                 if cmd == "quit":
                     break
                 elif cmd == "new":
@@ -579,7 +852,7 @@ class TelegramEditor:
                         tags=[]
                     )
                     print(f"[OK] 已创建草稿 (ID: {self.current_draft.id})")
-                
+
                 elif cmd == "preview":
                     if self.current_draft:
                         print(f"\n{'='*50}")
@@ -587,7 +860,7 @@ class TelegramEditor:
                         print(f"{'='*50}")
                     else:
                         print("[X] 没有当前草稿")
-                
+
                 elif cmd == "save":
                     if self.current_draft:
                         existing = [d for d in self.drafts if d.id == self.current_draft.id]
@@ -600,43 +873,144 @@ class TelegramEditor:
                         print("[OK] 草稿已保存")
                     else:
                         print("[X] 没有可保存的内容")
-                
+
                 elif cmd == "drafts":
                     if self.drafts:
                         for d in self.drafts[-5:]:
                             print(f"* {d.id}: {d.content[:50]}...")
                     else:
                         print("[空] 没有草稿")
-                
+
                 elif cmd == "templates":
                     for t in self.templates.get('templates', []):
                         print(f"* {t['id']}: {t['name']}")
-                
+
                 elif cmd == "send":
-                    print("CLI 模式不支持发送，请使用 Bot 模式")
-                
+                    channel = self.config.get('bot', {}).get('default_channel')
+                    if not channel:
+                        channel = input("请输入目标 chat id: ").strip()
+                    if not channel:
+                        print("[X] 未提供 chat id")
+                        continue
+                    if not self.current_draft:
+                        print("[X] 没有当前草稿")
+                        continue
+                    try:
+                        self._send_to_chat_sync(channel, self.current_draft.content, self.current_draft.parse_mode)
+                        self._record_history(self.current_draft.content, channel, 'sent')
+                        print(f"[OK] 已发送到 {channel}")
+                    except Exception as e:
+                        self._record_history(self.current_draft.content, channel, 'failed', str(e))
+                        print(f"[X] 发送失败: {e}")
+
                 else:
                     print("未知命令")
-                    
+
             except KeyboardInterrupt:
                 break
             except Exception as e:
                 print(f"错误: {e}")
-        
+
         print("\n再见!")
 
 
-def main():
-    """主入口"""
+def _build_arg_parser():
+    """构建 CLI argparse 解析器。"""
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="telegram-editor", description="Telegram 消息编辑与推送 CLI")
+    sub = parser.add_subparsers(dest="command")
+
+    p = sub.add_parser("send", help="发送消息到指定 chat")
+    p.add_argument("--chat-id", required=True)
+    p.add_argument("--text", required=True)
+    p.add_argument("--parse-mode", default=None, choices=["Markdown", "MarkdownV2", "HTML"])
+
+    p = sub.add_parser("preview", help="本地预览消息内容")
+    p.add_argument("--text", required=True)
+    p.add_argument("--parse-mode", default=None, choices=["Markdown", "MarkdownV2", "HTML"])
+
+    p = sub.add_parser("draft", help="草稿管理")
+    p.add_argument("draft_action", choices=["save", "list", "send"])
+    p.add_argument("--name", help="草稿 ID（send 时必填）")
+    p.add_argument("--text", help="草稿内容（save 时必填）")
+    p.add_argument("--chat-id", help="目标 chat id（send 时必填）")
+    p.add_argument("--parse-mode", default=None, choices=["Markdown", "MarkdownV2", "HTML"])
+
+    p = sub.add_parser("broadcast", help="群发到多个 chat")
+    p.add_argument("--chats", required=True, help="逗号分隔的 chat id 列表")
+    p.add_argument("--text", required=True)
+    p.add_argument("--parse-mode", default=None, choices=["Markdown", "MarkdownV2", "HTML"])
+
+    p = sub.add_parser("schedule", help="定时发送消息")
+    p.add_argument("--chat-id", required=True)
+    p.add_argument("--text", required=True)
+    p.add_argument("--at", required=True, help="发送时间，格式 YYYY-MM-DD HH:MM")
+    p.add_argument("--parse-mode", default=None, choices=["Markdown", "MarkdownV2", "HTML"])
+
+    p = sub.add_parser("config", help="查看/修改配置")
+    p.add_argument("config_action", choices=["show", "set-token", "set-default-chat"])
+    p.add_argument("value", nargs="?", help="set-token / set-default-chat 的值")
+
+    return parser
+
+
+def _ensure_utf8_stdout():
+    """尽量让 stdout 支持 utf-8 输出（用于中文/emoji），失败则忽略。"""
     import sys
-    
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
+def main():
+    """主入口：支持子命令、--cli 交互模式、无参数启动 Bot。"""
+    import sys
+
+    # --cli 交互模式（保持向后兼容）
+    if len(sys.argv) >= 2 and sys.argv[1] == "--cli":
+        _ensure_utf8_stdout()
+        TelegramEditor().run_cli()
+        return
+
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+
+    _ensure_utf8_stdout()
     editor = TelegramEditor()
-    
-    # 检查命令行参数
-    if len(sys.argv) > 1 and sys.argv[1] == "--cli":
-        editor.run_cli()
-    else:
+
+    if not args.command:
+        # 无子命令：启动 Bot
         editor.run()
+        return
+
+    # 子命令参数校验
+    if args.command == "draft":
+        if args.draft_action == "save" and not args.text:
+            print("❌ draft save 需要 --text")
+            sys.exit(2)
+        if args.draft_action == "send" and (not args.name or not args.chat_id):
+            print("❌ draft send 需要 --name 和 --chat-id")
+            sys.exit(2)
+    if args.command == "config" and args.config_action in ("set-token", "set-default-chat") and not args.value:
+        print(f"❌ config {args.config_action} 需要提供 value")
+        sys.exit(2)
+
+    handlers = {
+        "send": editor.cli_send,
+        "preview": editor.cli_preview,
+        "draft": editor.cli_draft,
+        "broadcast": editor.cli_broadcast,
+        "schedule": editor.cli_schedule,
+        "config": editor.cli_config,
+    }
+    handler = handlers.get(args.command)
+    if not handler:
+        parser.print_help()
+        sys.exit(2)
+
+    sys.exit(handler(args))
 
 
 if __name__ == "__main__":
