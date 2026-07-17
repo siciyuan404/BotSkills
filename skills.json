@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0",
-  "updated": "2026-06-25T11:54:35.051675+00:00",
+  "updated": "2026-07-17T05:50:00+08:00",
   "skills": [
     {
       "name": "flutter-gh-starter",
@@ -28,6 +28,18 @@
       "dependencies": [
         "cloudflared"
       ]
+    },
+    {
+      "name": "cangjie-skill",
+      "description": "Distill a book, long-video transcript, podcast, course, or interview into a coherent set of executable skills. Use when the user asks to distill a book/video/podcast into skills — i.e. wants frameworks, principles, and methodologies extracted into atomic, reusable skills.",
+      "path": "cangjie-skill/",
+      "dependencies": []
+    },
+    {
+      "name": "software-update",
+      "description": "Implement auto-update, self-update, OTA, and release-distribution features for desktop, server, and Docker applications. Use when user asks about adding update mechanisms, version checking, atomic replacement, rollback, or restart-after-update.",
+      "path": "software-update/",
+      "dependencies": []
     }
   ]
 }

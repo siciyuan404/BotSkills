@@ -42,6 +42,8 @@ curl -fsSL https://raw.githubusercontent.com/siciyuan404/BotSkills/main/install.
 | [rclone](./rclone/) | Comprehensive rclone control for MinIO and cloud storage operations. Use when th | — |
 | [telegram-editor](./telegram-editor/) | Telegram Bot message editing and push management skill. Provides capabilities fo | — |
 | [cloudflared](./cloudflared/) | Complete Cloudflare Tunnel (cloudflared) management for exposing local services through Cloudflare. | cloudflared |
+| [cangjie-skill](./cangjie-skill/) | Distill books/videos/podcasts into executable agent skills | — |
+| [software-update](./software-update/) | Auto-update/self-update/OTA for desktop, server, Docker apps | — |
 
 ## 添加新 Skill
 

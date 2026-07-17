@@ -51,7 +51,7 @@ def parse_frontmatter(content: str) -> dict:
         for line in lines:
             if line.strip().startswith("description:"):
                 rest = line.split(":", 1)[1].strip()
-                if rest.startswith(">"):
+                if rest.strip().startswith(">"):
                     in_desc = True
                     continue
                 elif rest:
