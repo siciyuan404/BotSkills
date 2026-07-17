@@ -40,6 +40,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Playwright test artifacts
+.playwright-cli/
+
 # Config files with sensitive data
 *_local.yaml
 *_local.json

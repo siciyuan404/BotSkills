@@ -20,6 +20,14 @@
       "description": "Telegram Bot message editing and push management skill. Provides capabilities for editing message content, previewing messages before sending, managing message templates, and pushing messages to Telegram channels or groups.",
       "path": "telegram-editor/",
       "dependencies": []
+    },
+    {
+      "name": "cloudflared",
+      "description": "Complete Cloudflare Tunnel (cloudflared) management for exposing local services through Cloudflare. Use whenever the user mentions Cloudflare tunnels, cloudflared, exposing local services, making localhost accessible from the internet, tunnel setup, ingress configuration, or Cloudflare Access.",
+      "path": "cloudflared/",
+      "dependencies": [
+        "cloudflared"
+      ]
     }
   ]
 }

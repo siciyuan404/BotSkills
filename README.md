@@ -41,6 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/siciyuan404/BotSkills/main/install.
 | [flutter-gh-starter](./flutter-gh-starter/) | Primary skill for bootstrapping a Flutter mobile project and managing it as an o | — |
 | [rclone](./rclone/) | Comprehensive rclone control for MinIO and cloud storage operations. Use when th | — |
 | [telegram-editor](./telegram-editor/) | Telegram Bot message editing and push management skill. Provides capabilities fo | — |
+| [cloudflared](./cloudflared/) | Complete Cloudflare Tunnel (cloudflared) management for exposing local services through Cloudflare. | cloudflared |
 
 ## 添加新 Skill
 

@@ -1,0 +1,23 @@
+{
+  "skill_name": "cloudflared",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I just set up a new Node.js app running on port 3000 locally. I want to expose it through Cloudflare Tunnel so I can access it at app.mydomain.com. Can you help me set up the tunnel from scratch? I haven't used cloudflared before.",
+      "expected_output": "A complete guide with cloudflared tunnel creation, DNS routing to app.mydomain.com, ingress configuration pointing to localhost:3000, and instructions for running the tunnel (foreground test + service install)",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I already have a tunnel called 'main-tunnel' running with two services. I need to add a third service: Grafana running on http://localhost:3001, accessible at grafana.mydomain.com. Show me how to update the config and reload without downtime.",
+      "expected_output": "Instructions to update config.yml adding a new ingress rule for grafana.mydomain.com -> localhost:3001, and how to apply changes with minimal or zero downtime (restart service or tunnel)",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "My cloudflared tunnel was working fine yesterday but today it's not connecting. When I try to access my app I get a 502 error. Help me debug this step by step - check the service status, logs, config, and local services.",
+      "expected_output": "A systematic debugging workflow: check cloudflared service status, check local services are running, inspect tunnel logs, validate config, test tunnel connectivity, and provide fixes for common issues",
+      "files": []
+    }
+  ]
+}
