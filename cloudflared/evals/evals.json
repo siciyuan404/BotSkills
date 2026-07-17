@@ -4,19 +4,25 @@
     {
       "id": 1,
       "prompt": "I just set up a new Node.js app running on port 3000 locally. I want to expose it through Cloudflare Tunnel so I can access it at app.mydomain.com. Can you help me set up the tunnel from scratch? I haven't used cloudflared before.",
-      "expected_output": "A complete guide with cloudflared tunnel creation, DNS routing to app.mydomain.com, ingress configuration pointing to localhost:3000, and instructions for running the tunnel (foreground test + service install)",
+      "expected_output": "A complete walkthrough covering login, tunnel creation, DNS routing, config.yml with ingress rule, and Windows service setup using the correct New-Service approach",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "I already have a tunnel called 'main-tunnel' running with two services. I need to add a third service: Grafana running on http://localhost:3001, accessible at grafana.mydomain.com. Show me how to update the config and reload without downtime.",
-      "expected_output": "Instructions to update config.yml adding a new ingress rule for grafana.mydomain.com -> localhost:3001, and how to apply changes with minimal or zero downtime (restart service or tunnel)",
+      "prompt": "I already have a tunnel called 'main-tunnel' running with two services. I need to add a third service: Grafana running on http://localhost:3001, accessible at grafana.mydomain.com. Show me how to add this to the tunnel.",
+      "expected_output": "Use add-port.ps1 or manually: cloudflared tunnel route dns, add ingress rule to config.yml before 404 catch-all, restart service with taskkill+Start-Service",
       "files": []
     },
     {
       "id": 3,
-      "prompt": "My cloudflared tunnel was working fine yesterday but today it's not connecting. When I try to access my app I get a 502 error. Help me debug this step by step - check the service status, logs, config, and local services.",
-      "expected_output": "A systematic debugging workflow: check cloudflared service status, check local services are running, inspect tunnel logs, validate config, test tunnel connectivity, and provide fixes for common issues",
+      "prompt": "My cloudflared tunnel was working fine yesterday but today it's not connecting. When I try to access my app I get a 502 error. Help me debug this step by step.",
+      "expected_output": "Diagnostic workflow: sc query/service status, cloudflared tunnel list for connections, validate config ingress, check local service, check tunnel.log, force restart with taskkill/Start-Service if needed",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "I have a tunnel called 'my-tunnel' that I created last month, but I lost the credentials JSON file and now the tunnel won't connect. How do I recover it?",
+      "expected_output": "Use cloudflared tunnel token to get the token, decode from base64, write credentials JSON with [System.IO.File]::WriteAllText (not Set-Content to avoid BOM), then restart service",
       "files": []
     }
   ]

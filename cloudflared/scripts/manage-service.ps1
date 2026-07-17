@@ -2,102 +2,105 @@
 .SYNOPSIS
   Manage the cloudflared Windows service.
 .DESCRIPTION
-  Install, start, stop, restart, remove, or check status of the cloudflared service.
+  Install (using New-Service with correct command order), start, stop, restart, remove, check status.
+  IMPORTANT: cloudflared service install creates a generic agent that does NOT run your tunnel.
+  Use this script instead — it creates a service that explicitly runs `tunnel --config path run`.
 .PARAMETER Action
-  Action to perform: install, start, stop, restart, remove, status
+  install, start, stop, restart, remove, status
+.PARAMETER ConfigPath
+  Path to config.yml (default: ~\.cloudflared\config.yml)
 .EXAMPLE
+  .\manage-service.ps1 -Action install
   .\manage-service.ps1 -Action status
-  .\manage-service.ps1 -Action restart
 #>
 
 param(
   [Parameter(Mandatory = $true)]
   [ValidateSet('install', 'start', 'stop', 'restart', 'remove', 'status')]
-  [string]$Action
+  [string]$Action,
+  [string]$ConfigPath = "$env:USERPROFILE\.cloudflared\config.yml"
 )
 
 $serviceName = "cloudflared"
 
+function Write-OK { Write-Host "✅ $($args[0])" -ForegroundColor Green }
+function Write-Info { Write-Host "ℹ $($args[0])" -ForegroundColor Cyan }
+
 switch ($Action) {
   'install' {
-    Write-Host "Installing cloudflared service..." -ForegroundColor Cyan
-    cloudflared service install
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "Service installed. Starting..." -ForegroundColor Green
-      net start $serviceName
+    Write-Info "创建 cloudflared 服务..."
+    # CRITICAL: --config must be BEFORE run, NOT after
+    $binPath = "cloudflared.exe tunnel --config $ConfigPath run"
+
+    # Remove existing service first if any
+    sc.exe delete $serviceName 2>$null
+    Start-Sleep 3
+
+    $svc = New-Service -Name $serviceName -BinaryPathName $binPath -DisplayName "Cloudflare Tunnel" -StartupType Automatic 2>&1
+    if ($?) {
+      Write-OK "服务已创建"
+      Start-Service $serviceName 2>$null
+      if ($?) { Write-OK "服务已启动" }
     } else {
-      Write-Host "Installation failed." -ForegroundColor Red
+      Write-Host "  $svc" -ForegroundColor Red
     }
   }
 
   'start' {
-    Write-Host "Starting cloudflared service..." -ForegroundColor Cyan
-    net start $serviceName 2>$null
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "Service started." -ForegroundColor Green
-    } else {
-      Write-Host "Failed to start. Is it already running?" -ForegroundColor Yellow
-    }
+    Write-Info "启动服务..."
+    Start-Service $serviceName 2>$null
+    if ($?) { Write-OK "已启动" } else { Write-Host "  启动失败或已运行" -ForegroundColor Yellow }
   }
 
   'stop' {
-    Write-Host "Stopping cloudflared service..." -ForegroundColor Cyan
-    net stop $serviceName 2>$null
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "Service stopped." -ForegroundColor Green
-    } else {
-      Write-Host "Failed to stop. Is it running?" -ForegroundColor Yellow
+    Write-Info "停止服务..."
+    Stop-Service $serviceName -Force 2>$null
+    if ($?) { Write-OK "已停止" } else {
+      Write-Host "  尝试强制停止..." -ForegroundColor Yellow
+      taskkill /F /IM cloudflared.exe 2>$null
+      Write-OK "已强制停止"
     }
   }
 
   'restart' {
-    Write-Host "Restarting cloudflared service..." -ForegroundColor Cyan
-    net stop $serviceName 2>$null
-    Start-Sleep -Seconds 2
-    net start $serviceName 2>$null
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "Service restarted." -ForegroundColor Green
-    } else {
-      Write-Host "Failed to restart." -ForegroundColor Red
-    }
+    Write-Info "重启服务..."
+    taskkill /F /IM cloudflared.exe 2>$null
+    Start-Sleep 3
+    Start-Service $serviceName 2>$null
+    if ($?) { Write-OK "已重启" } else { Write-Host "  重启失败" -ForegroundColor Red }
   }
 
   'remove' {
-    Write-Host "Removing cloudflared service..." -ForegroundColor Cyan
-    net stop $serviceName 2>$null
-    Start-Sleep -Seconds 2
-    cloudflared service uninstall
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "Service removed." -ForegroundColor Green
-    } else {
-      Write-Host "Failed to remove." -ForegroundColor Red
-    }
+    Write-Info "删除服务..."
+    taskkill /F /IM cloudflared.exe 2>$null
+    Start-Sleep 2
+    sc.exe delete $serviceName 2>$null
+    if ($?) { Write-OK "已删除" }
   }
 
   'status' {
     $svc = sc.exe query $serviceName 2>$null
     if ($LASTEXITCODE -eq 0) {
-      if ($svc -match 'STATE\s+:\s+(\S+)\s+(\S+)') {
+      if ($svc -match 'STATE\s+:\s+(\d+)') {
         $stateCode = $matches[1]
         $stateText = switch ($stateCode) {
-          '1' { 'STOPPED' }
-          '2' { 'START_PENDING' }
-          '3' { 'STOP_PENDING' }
-          '4' { 'RUNNING' }
-          '5' { 'CONTINUE_PENDING' }
-          '6' { 'PAUSE_PENDING' }
-          '7' { 'PAUSED' }
-          default { "UNKNOWN ($stateCode)" }
+          '1' { 'STOPPED' }; '2' { 'START_PENDING' }; '3' { 'STOP_PENDING' }
+          '4' { 'RUNNING' }; '5' { 'CONTINUE_PENDING' }; '6' { 'PAUSE_PENDING' }; '7' { 'PAUSED' }
         }
-        $color = if ($stateCode -eq '4') { 'Green' } elseif ($stateCode -eq '1') { 'Gray' } else { 'Yellow' }
+        $color = switch ($stateCode) { '4' { 'Green' } '1' { 'Gray' } default { 'Yellow' } }
         Write-Host "cloudflared: $stateText" -ForegroundColor $color
 
         if ($svc -match 'PID\s+:\s+(\d+)') {
           Write-Host "PID: $($matches[1])"
         }
       }
+
+      $qc = sc.exe qc $serviceName 2>$null
+      if ($qc -match 'BINARY_PATH_NAME\s+:\s+(.+)') {
+        Write-Host "命令: $($matches[1].Trim())" -ForegroundColor Gray
+      }
     } else {
-      Write-Host "cloudflared: not installed" -ForegroundColor Gray
+      Write-Host "cloudflared: 未安装" -ForegroundColor Gray
     }
   }
 }

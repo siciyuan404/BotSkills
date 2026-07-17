@@ -7,75 +7,52 @@ description: Complete Cloudflare Tunnel (cloudflared) management for exposing lo
 
 Complete cloudflared management for exposing local services through Cloudflare Tunnel.
 
+**Platform:** Windows (PowerShell)
+
 ## Overview
 
-Cloudflare Tunnel creates a secure, encrypted connection from your local services to Cloudflare's edge network, without opening any inbound firewall ports. This skill covers the full lifecycle: authentication, tunnel creation, configuration, DNS routing, service management, and Access policies.
-
-**Platform:** Windows (PowerShell)
+Cloudflare Tunnel creates a secure, encrypted connection from your local services to Cloudflare's edge network, without opening any inbound firewall ports. This skill covers the full lifecycle: authentication, tunnel creation, configuration, DNS routing, Windows service management, and troubleshooting.
 
 ## Quick Start
 
 ### Authentication
 
 ```powershell
-# Login to Cloudflare (opens browser for OAuth)
+cloudflared tunnel login
+# Certificate saved to: ~\.cloudflared\cert.pem
+```
+
+### Existing Tunnel → Add a Port
+
+The most common task: you have a tunnel, you want to expose a new local service.
+
+```powershell
+# 1. Route DNS (if not already done)
+cloudflared tunnel route dns <tunnel-name> <hostname>
+
+# 2. Add ingress rule to config.yml, then restart
+scripts\add-port.ps1 -TunnelName <tunnel-name> -Hostname <hostname> -LocalPort <port>
+```
+
+See `scripts\add-port.ps1` — one command does DNS routing, config update, and service restart.
+
+### New Tunnel Setup (Full)
+
+```powershell
+# 1. Login
 cloudflared tunnel login
 
-# Certificate is saved to: ~\.cloudflared\cert.pem
-```
-
-### Create Your First Tunnel
-
-```powershell
-# Create a tunnel
+# 2. Create tunnel
 cloudflared tunnel create my-tunnel
 
-# The tunnel credentials file is created at:
-# ~\.cloudflared\<tunnel-id>.json
-```
-
-### Route DNS
-
-```powershell
-# Route a subdomain to your tunnel
+# 3. Route DNS
 cloudflared tunnel route dns my-tunnel app.yourdomain.com
-```
 
-### Create Config
-
-Create `config.yml` in `~\.cloudflared\`:
-```yaml
-tunnel: my-tunnel
-credentials-file: C:\Users\%USERNAME%\.cloudflared\<tunnel-id>.json
-
-ingress:
-  - hostname: app.yourdomain.com
-    service: http://localhost:3000
-  - service: http_status:404
-```
-
-### Run the Tunnel
-
-```powershell
-# Run in foreground (for testing)
-cloudflared tunnel run my-tunnel
-
-# Install as Windows service
-cloudflared service install
-
-# Start the service
-net start cloudflared
+# 4. Write config.yml, then install + start service
+scripts\setup-tunnel.ps1
 ```
 
 ## Tunnel Management
-
-### Create Tunnel
-
-```powershell
-cloudflared tunnel create <tunnel-name>
-```
-
-Generates a UUID-based credentials JSON file. Save the tunnel ID — you'll need it for configuration.
 
 ### List Tunnels
 
@@ -83,238 +60,223 @@ Generates a UUID-based credentials JSON file. Save the tunnel ID — you'll need
 cloudflared tunnel list
 ```
 
-Shows tunnel name, ID, status (active/inactive), and creation date.
+Shows tunnel name, ID, status, and active connections.
+
+### Create Tunnel
+
+```powershell
+cloudflared tunnel create <tunnel-name>
+```
+
+Generates a UUID-based credentials JSON file at `~\.cloudflared\<tunnel-id>.json`.
+
+### Recover Missing Credentials
+
+If the credentials `.json` is lost but the tunnel still exists in Cloudflare:
+
+```powershell
+# Get the tunnel token
+$token = cloudflared tunnel token <tunnel-name>
+
+# Decode it to JSON
+$bytes = [Convert]::FromBase64String($token)
+$cred = [System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+
+# Write WITHOUT BOM — Set-Content with -Encoding UTF8 adds BOM and breaks cloudflared!
+$json = $cred | ConvertTo-Json
+[System.IO.File]::WriteAllText("$env:USERPROFILE\.cloudflared\$($cred.TunnelID).json", $json)
+```
+
+**CRITICAL:** Never use `Set-Content -Encoding UTF8` for credentials JSON. PowerShell adds a BOM (Byte Order Mark, `ï` bytes) at the start that cloudflared chokes on. Use `[System.IO.File]::WriteAllText()` instead.
 
 ### Delete Tunnel
 
 ```powershell
 cloudflared tunnel delete <tunnel-name>
-```
-
-To force-delete a running tunnel:
-```powershell
-cloudflared tunnel delete -f <tunnel-name>
-```
-
-### Tunnel Info
-
-```powershell
-cloudflared tunnel info <tunnel-name>
-```
-
-### Cleanup Stale Tunnels
-
-```powershell
-# List all tunnels with status
-cloudflared tunnel list
-
-# Delete specific tunnels
-cloudflared tunnel delete stale-tunnel-name
+cloudflared tunnel delete -f <tunnel-name>  # Force delete even if running
 ```
 
 ## Configuration (config.yml)
 
-The config file lives at `~\.cloudflared\config.yml` (or a custom path).
+Default location: `~\.cloudflared\config.yml`
 
-### Full Config Example
+### Full Example
 
 ```yaml
 tunnel: my-tunnel
-credentials-file: C:\Users\MyUser\.cloudflared\abc123.json
+credentials-file: C:\Users\MyUser\.cloudflared\<tunnel-id>.json
 
-# Log settings
 logfile: C:\Users\MyUser\.cloudflared\tunnel.log
 loglevel: info
 
-# Metrics (optional, for monitoring)
-metrics: localhost:2000
-
-# Ingress rules (routes hostnames to local services)
 ingress:
-  # Route app.yourdomain.com to localhost:3000
   - hostname: app.yourdomain.com
     service: http://localhost:3000
-
-  # Route api.yourdomain.com to localhost:8080
   - hostname: api.yourdomain.com
     service: http://localhost:8080
-
-  # Route dashboard.yourdomain.com to localhost:9000
-  - hostname: dashboard.yourdomain.com
-    service: http://localhost:9000
-
-  # Catch-all rule — MUST be last. Returns 404 for unmatched routes.
-  - service: http_status:404
+  - service: http_status:404  # MUST be last
 ```
 
-### Ingress Rules Reference
+### Validate Config
 
-| Type | Example | Description |
-|------|---------|-------------|
-| HTTP | `http://localhost:3000` | Route to local HTTP service |
-| HTTPS | `https://localhost:8443` | Route to local HTTPS service |
-| Unix | `unix:/tmp/app.sock` | Route to Unix socket (Linux only) |
-| Status | `http_status:404` | Return HTTP status (404, 502, etc.) |
-| File | `file:/var/www` | Serve static files (Linux only) |
-| SSH | `ssh://localhost:22` | Proxy SSH through tunnel |
-| RDP | `tcp://localhost:3389` | Proxy TCP (RDP, databases, etc.) |
-| Bastion | `bastion` | SSH bastion mode |
-
-### Origin Request Settings
-
-```yaml
-originRequest:
-  connectTimeout: 30s
-  tlsTimeout: 30s
-  noTLSVerify: false
-  # HTTP Host header override
-  originServerName: service.internal
+```powershell
+cloudflared tunnel --config ~\.cloudflared\config.yml ingress validate
 ```
 
 ## DNS Configuration
 
-### Route Domains
-
 ```powershell
-# Route a DNS record to your tunnel
+# Route a domain to the tunnel
 cloudflared tunnel route dns <tunnel-name> <hostname>
 
-# Example
-cloudflared tunnel route dns my-tunnel app.yourdomain.com
+# It's safe to re-run — if already routed, it says so and does nothing:
+# "code.6200052.xyz is already configured to route to your tunnel"
 ```
 
-This creates a CNAME record in Cloudflare DNS pointing `<hostname>` to `<tunnel-id>.cfargotunnel.com`.
+## Windows Service (Production)
 
-### Route IP Networks
+**⚠ `cloudflared service install` creates a generic agent that does NOT automatically connect to your tunnel.** Always use the custom service method below.
 
-```powershell
-# Route an IP range through the tunnel (for private networks)
-cloudflared tunnel route ip <network/cidr> <tunnel-name>
-```
-
-### Route to Load Balancer
+### Install Service (Correct Way)
 
 ```powershell
-cloudflared tunnel route lb <tunnel-name> <lb-hostname> <lb-pool>
-```
-
-## Running Tunnels
-
-### Foreground (Testing)
-
-```powershell
-cloudflared tunnel run <tunnel-name>
-```
-
-Press Ctrl+C to stop.
-
-### Quick Run with Inline Config
-
-```powershell
-cloudflared tunnel run --url http://localhost:3000
-```
-
-This creates a quick tunnel with a random subdomain on trycloudflare.com — no account needed.
-
-### Windows Service (Production)
-
-```powershell
-# Install service (uses ~\.cloudflared\config.yml)
-cloudflared service install
+# Create service with explicit config path
+$binPath = "cloudflared.exe tunnel --config $env:USERPROFILE\.cloudflared\config.yml run"
+New-Service -Name cloudflared -BinaryPathName $binPath -DisplayName "Cloudflare Tunnel" -StartupType Automatic
 
 # Start
-net start cloudflared
+Start-Service cloudflared
 
-# Stop
-net stop cloudflared
-
-# Restart
-net stop cloudflared; net start cloudflared
-
-# Remove service
-cloudflared service uninstall
-
-# Check status
-sc query cloudflared
+# Or one-liner:
+sc.exe create cloudflared binPath= "cloudflared.exe tunnel --config C:\Users\MyUser\.cloudflared\config.yml run" start= auto displayname= "Cloudflare Tunnel"
 ```
 
-The service auto-starts on boot. It reads `config.yml` from `~\.cloudflared\`.
+**Why this works:** `--config` must come BEFORE the `run` subcommand. `cloudflared tunnel run --config path` fails with "flag provided but not defined". The correct order is `cloudflared tunnel --config path run`.
 
-### Multiple Tunnel Services
-
-For multiple tunnels, install separate services using `nssm` or configure each tunnel with its own config file:
+### Service Management
 
 ```powershell
-cloudflared tunnel --config C:\path\to\tunnel-a\config.yml run
+Start-Service cloudflared          # Start
+Stop-Service cloudflared           # Stop
+Restart-Service cloudflared        # Restart
+sc.exe query cloudflared           # Check status
 ```
 
-## File Server
+### Force Restart (When Stuck)
 
-Cloudflare Tunnel can serve local directories through the edge:
-
-```yaml
-ingress:
-  - hostname: files.yourdomain.com
-    service: http://localhost:8080
-    # Or use built-in file serving:
-    # service: file:/path/to/directory
-  - service: http_status:404
+```powershell
+taskkill /F /IM cloudflared.exe    # Force kill all cloudflared processes
+Start-Sleep 5
+# Wait for service deletion to propagate if re-creating
+sc.exe query cloudflared  # Verify service is gone
+Start-Service cloudflared           # Restart
 ```
 
-For Windows, use a web server (like `npx serve` or a Python HTTP server) as the local service.
+### View Service Config
 
-## Cloudflare Access
-
-Access policies let you add authentication in front of your tunneled services.
-
-### Create a Self-Hosted Application
-
-Via the Cloudflare Dashboard:
-1. Go to Zero Trust → Access → Applications
-2. Add a self-hosted application
-3. Set domain (must be routed to your tunnel)
-4. Configure policy rules
-
-### Policy Rules Common Patterns
-
-```yaml
-# Example policy rules (configured via Dashboard or API):
-# - Allow anyone with @yourcompany.com email
-# - Require specific email domain
-# - Allow only specific IP ranges
-# - Require device posture checks
-# - MFA enforcement
+```powershell
+sc.exe qc cloudflared
+# Verify BINARY_PATH_NAME has correct --config before run
 ```
 
-### Quick Access via Dashboard
+### Remove Service
 
-For simple auth, use Cloudflare's built-in Access:
-1. **Zero Trust Dashboard** → Access → Applications → Add Application
-2. **Application type**: Self-hosted
-3. **Domain**: `app.yourdomain.com` (must match your ingress hostname)
-4. **Policy**: Name it, set rules (e.g., "Allow" if email ends with `@yourdomain.com`)
-5. **Save** — Access enforces the policy automatically for traffic entering through the tunnel.
+```powershell
+Stop-Service cloudflared
+sc.exe delete cloudflared
+```
 
 ## Scripts
 
-The skill includes PowerShell scripts for common operations:
+### `scripts/add-port.ps1`
+**Most frequently used.** One command to add a new service to an existing tunnel:
+
+```powershell
+.\scripts\add-port.ps1 -TunnelName code-6200052 -Hostname api.6200052.xyz -LocalPort 8080
+```
+
+This does: DNS route → config.yml ingress update → validate → service restart.
 
 ### `scripts/setup-tunnel.ps1`
-Interactive tunnel creation wizard — handles authentication check, tunnel creation, DNS routing, and config file generation in one guided flow.
+Interactive wizard for first-time tunnel setup.
 
 ### `scripts/list-tunnels.ps1`
-Detailed tunnel listing with status, service health, and credential file info.
+Tunnel status overview.
 
 ### `scripts/manage-service.ps1`
-Windows service management: install, start, stop, restart, remove, and check status of the cloudflared service.
+Service lifecycle manager.
+
+## Troubleshooting
+
+### Tunnel Won't Connect
+
+```powershell
+# Check service is running
+sc.exe query cloudflared
+
+# Check tunnel connections
+cloudflared tunnel list
+
+# Validate config
+cloudflared tunnel --config ~\.cloudflared\config.yml ingress validate
+
+# Check logs
+Get-Content "$env:USERPROFILE\.cloudflared\tunnel.log" -Tail 50
+
+# Test local service is running
+Test-NetConnection -ComputerName localhost -Port 3080
+```
+
+### Common Issues
+
+| Error | Likely Cause | Fix |
+|-------|-------------|-----|
+| `Cannot determine default origin certificate path` | Not logged in | `cloudflared tunnel login` |
+| `invalid JSON: invalid character 'ï'` | BOM in credentials file | Rewrite with `[System.IO.File]::WriteAllText()` (not `Set-Content`) |
+| `failed to dial to edge with quic: timeout` | UDP/QUIC blocked by firewall or proxy | Auto-fallback to HTTP/2 — check precheck output |
+| `cloudflared service install` creates agent that doesn't connect | Generic agent doesn't read config.yml | Use `New-Service` with `tunnel --config path run` |
+| `flag provided but not defined: -config` | `--config` placed after `run` | Correct: `cloudflared tunnel --config path run` |
+| `ERR 1033` | Argo Smart Routing / edge connection | Check tunnel connections in dashboard |
+| `530` / `error code: 1033` via browser | No active tunnel connection | Check service and tunnel connections |
+| `connection timeout` | Local service not running | Start your local server on the expected port |
+
+### Logs
+
+```powershell
+Get-Content "$env:USERPROFILE\.cloudflared\tunnel.log" -Tail 50
+
+# Foreground test with verbose output
+cloudflared tunnel --config ~\.cloudflared\config.yml run
+```
+
+### Pre-checks (Connectivity Diagnostics)
+
+When you run `cloudflared tunnel --config path run`, it automatically runs connectivity pre-checks:
+
+```
+DNS Resolution    → PASS  (DNS resolves correctly)
+UDP Connectivity  → FAIL  (QUIC blocked — common on restrictive networks)
+TCP Connectivity  → PASS  (HTTP/2 fallback works)
+Cloudflare API    → PASS  (API reachable)
+```
+
+Cloudflared auto-falls back to HTTP/2 if QUIC fails. This is normal.
 
 ## Common Patterns
 
-### Pattern 1: Quick Dev Tunnel
+### Pattern 1: Add Port to Existing Tunnel
 
 ```powershell
-# Test a local service without any setup
-cloudflared tunnel run --url http://localhost:3000
+# The fastest way — uses add-port.ps1
+.\scripts\add-port.ps1 -TunnelName my-tunnel -Hostname app.mydomain.com -LocalPort 4200
+
+# Manual equivalent:
+# 1. Route DNS
+cloudflared tunnel route dns my-tunnel app.mydomain.com
+# 2. Edit config.yml — add ingress rule before the 404 catch-all
+# 3. Restart service
+taskkill /F /IM cloudflared.exe
+Start-Service cloudflared
 ```
 
 ### Pattern 2: Full Production Setup
@@ -329,20 +291,20 @@ cloudflared tunnel create my-app-tunnel
 # 3. Route DNS
 cloudflared tunnel route dns my-app-tunnel app.yourdomain.com
 
-# 4. Write config.yml
-#    (use setup-tunnel.ps1 or write manually)
+# 4. Write config.yml with ingress rules
 
-# 5. Install service
-cloudflared service install
+# 5. Install service (use New-Service, NOT cloudflared service install)
+$binPath = "cloudflared.exe tunnel --config $env:USERPROFILE\.cloudflared\config.yml run"
+New-Service -Name cloudflared -BinaryPathName $binPath -DisplayName "Cloudflare Tunnel" -StartupType Automatic
 
 # 6. Start
-net start cloudflared
+Start-Service cloudflared
 ```
 
-### Pattern 3: Multiple Services
+### Pattern 3: Multiple Services (One Tunnel)
 
 ```yaml
-# config.yml — single tunnel, multiple hostnames
+# config.yml — single tunnel routes multiple domains
 tunnel: main-tunnel
 credentials-file: C:\Users\MyUser\.cloudflared\main-tunnel.json
 
@@ -353,98 +315,29 @@ ingress:
     service: http://localhost:8080
   - hostname: admin.yourdomain.com
     service: http://localhost:9000
-  - hostname: status.yourdomain.com
-    service: http://localhost:9090
   - service: http_status:404
 ```
 
-### Pattern 4: RDP Through Tunnel
+### Pattern 4: RDP / SSH / TCP Through Tunnel
 
 ```yaml
 ingress:
   - hostname: rdp.yourdomain.com
     service: tcp://localhost:3389
-  - service: http_status:404
-```
-
-Then connect from any machine:
-```powershell
-# Using cloudflared access
-cloudflared access rdp --hostname rdp.yourdomain.com --destination localhost:3389
-```
-
-### Pattern 5: SSH Bastion
-
-```yaml
-ingress:
   - hostname: ssh.yourdomain.com
     service: ssh://localhost:22
   - service: http_status:404
 ```
 
-Configure SSH:
-```powershell
-# In ~/.ssh/config
-Host tunnel-ssh
-  ProxyCommand cloudflared access ssh --hostname ssh.yourdomain.com
-```
-
-## Troubleshooting
-
-### Tunnel Won't Connect
-
-```powershell
-# Check authentication
-cloudflared tunnel list
-
-# Verify config
-cloudflared tunnel --config ~\.cloudflared\config.yml ingress validate
-
-# Run with verbose logging
-cloudflared tunnel run <tunnel-name> --loglevel debug
-
-# Check service
-sc query cloudflared
-netstat -an | findstr ":2000"  # Check metrics port
-```
-
-### Common Issues
-
-| Issue | Likely Cause | Fix |
-|-------|-------------|-----|
-| `ERR Cannot determine default origin certificate path` | Not logged in | Run `cloudflared tunnel login` |
-| `config.yml not found` | No config file | Create one in `~\.cloudflared\` |
-| `service "cloudflared" not found` | Service not installed | `cloudflared service install` |
-| `failed to connect to origin` | Local service not running | Start your local server |
-| `404 for all routes` | No matching ingress rule | Check hostname case and patterns |
-| `ERR 1033` | Argo Smart Routing issue | Check Cloudflare dashboard |
-
-### Logs
-
-```powershell
-# Check service logs
-Get-Content "$env:USERPROFILE\.cloudflared\tunnel.log" -Tail 50
-
-# Run with debug output
-cloudflared tunnel run <tunnel-name> --loglevel debug
-```
-
-### Config Validation
-
-```powershell
-# Validate config file without running tunnel
-cloudflared tunnel --config ~\.cloudflared\config.yml ingress validate
-```
-
 ## Notes
 
-- Always login first: `cloudflared tunnel login`
-- The `cert.pem` is the root certificate — keep it secure
-- Each tunnel gets a UUID-based credentials JSON (the `.json` file)
-- The catch-all ingress rule (`http_status:404`) is required at the end
-- Use `scripts/setup-tunnel.ps1` for guided tunnel creation
-- Tunnel credentials files are tied to the Cloudflare account that created them
-- For production, run tunnel as a Windows service for auto-start
+- **CRITICAL: `--config` must be BEFORE `run`**: `cloudflared tunnel --config path run` ✓, `cloudflared tunnel run --config path` ✗
+- **CRITICAL: Don't use `cloudflared service install`** — it creates a generic agent that doesn't connect to your tunnel. Use `New-Service` with explicit `tunnel --config path run` command.
+- **CRITICAL: No BOM in credentials JSON** — Write with `[System.IO.File]::WriteAllText()`, not `Set-Content`
+- Each tunnel gets a UUID-based credentials JSON file — keep it safe
+- The catch-all ingress rule (`http_status:404`) is required at the end of ingress
+- QUIC/UDP may be blocked by firewall — cloudflared auto-falls back to HTTP/2
 - Ingress hostnames are matched exactly — `app.domain.com` ≠ `App.domain.com`
-- Origin services must be running before the tunnel starts
-- Delete tunnel credentials safely when decommissioning a tunnel
+- `cloudflared tunnel route dns` is idempotent — safe to re-run
+- DNS routing and ingress rules are separate: DNS points the hostname to the tunnel, ingress routes it to a local service
+- When stuck, `taskkill /F /IM cloudflared.exe` is the nuclear option — always works
