@@ -24,6 +24,14 @@ curl -s "$RECORDS_API_BASE/api/config" | head -c 200
 # 预期返回: { "owner": "mxrain", "repo": "zyt", ... }
 ```
 
+> ⚠️ **关键警告：分类 `link` 字段由服务端自动生成，切勿手动修改**
+>
+> 分类的 `link` 字段在创建时服务端自动设置为 `/<name>`（如 name="编程开发" → link="/编程开发"），**后续不可通过 PUT 更改**（服务器静默忽略此字段）。
+>
+> 前端路由模式为 `/category/<link>`，修改 link 会导致分类页 **404**。创建时 name 取什么中文名，URL 就是什么，浏览器会自动编码。
+>
+> **唯一正确做法**：创建时确定好 name，后续 `link` 完全交由服务端管理，永远不要传 `link` 参数。
+
 ## 认证
 
 | 方式 | 适用端点 | 说明 |
@@ -58,25 +66,28 @@ curl -s "$RECORDS_API_BASE/api/config" | head -c 200
 
 ### Categories
 
-嵌套递归结构，`icon` 使用 RemixIcon 类名：
+嵌套递归结构，`icon` 使用 RemixIcon 类名，**`link` 由服务端自动生成**（不可修改）：
 
 ```json
 {
-  "工具": { "icon": "RiTools", "link": "", "items": {
-    "开发": { "icon": "RiCode", "link": "", "items": {} }
+  "工具": { "icon": "RiTools", "link": "/工具", "items": {
+    "开发": { "icon": "RiCode", "link": "/开发", "items": {} }
   }},
-  "教程": { "icon": "RiBook", "link": "", "items": {} }
+  "教程": { "icon": "RiBook", "link": "/教程", "items": {} }
 }
 ```
 
 资源通过 `category` 字段（`"工具/开发"`）关联到分类路径。
 
+> 前端路由：`/category/<link>`，例如 `link="/编程开发"` 对应 URL `/category/%E7%BC%96%E7%A8%8B%E5%BC%80%E5%8F%91`。浏览器会自动百分比编码中文。<br>
+> **命名约束**：分类名不能包含 `/` `\` `<` `>` `{` `}` 字符，否则 API 的 path 参数校验失败。
+
 ## 分类管理 API
 
 ```
 POST   /api/categories      新增分类（正文 JSON）
-PUT    /api/categories      更新分类（改名/图标/链接）
-DELETE /api/categories      删除分类及子节点
+PUT    /api/categories      更新分类（改名/图标）    ← link 不可修改，传了也被忽略
+DELETE /api/categories      删除分类及子节点（⚠️ 级联删除所有后代）
 PATCH  /api/categories      移动分类（排序/更换父节点）
 GET    /api/categories      读取全部分类树
 ```
@@ -97,7 +108,7 @@ curl -s -X POST "$RECORDS_API_BASE/api/categories" \
   -H "Content-Type: application/json" \
   -d '{"path":["工具"], "name":"AI工具", "icon":"RiRobot", "link":""}'
 
-# 更新分类
+# 更新分类（只改 name 和 icon，link 传了也被忽略）
 curl -s -X PUT "$RECORDS_API_BASE/api/categories" \
   -H "X-API-Key: $RECORDS_API_KEY" \
   -H "Content-Type: application/json" \
@@ -263,32 +274,61 @@ curl -s -X PUT "$RECORDS_API_BASE/api/settings/siteTitle" \
 
 ## 常见组合场景
 
-### 1. 新增资源（分类不存在时自动创建）
+### 1. 批量创建分类树
+
+分类创建后 `link` 由服务端自动生成、不可修改，因此**创建时就想好 name**：
+
+```bash
+# 正确做法：逐级 POST，不给 link 参数
+curl -s -X POST "$RECORDS_API_BASE/api/categories" \
+  -H "X-API-Key: $RECORDS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"path":["编程开发"], "name":"前端开发", "icon":"RiHtml5"}'
+
+# 嵌套子分类
+curl -s -X POST "$RECORDS_API_BASE/api/categories" \
+  -H "X-API-Key: $RECORDS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"path":["编程开发","前端开发"], "name":"React", "icon":"RiReactjs"}'
+```
+
+> ❌ **不要**创建后去改 link 为英文路径（如 `/dev`）—— 这会让前端路由失效导致 404。中文 URL 是正常的，浏览器会自动百分比编码。
+
+### 2. 新增资源（分类不存在时自动创建）
 
 1. `GET /api/categories` 检查分类路径是否存在
-2. 若不存在，逐级 POST 创建
+2. 若不存在，逐级 POST 创建（不给 link）
 3. 用 `uuidgen`、`python3 -c "import uuid; print(uuid.uuid4())"` 或在线工具生成 UUID
 4. 构造 Resource JSON → `POST /api/resources/:uuid`
 5. 如需上首页推荐 → `POST /api/list/override` 追加到 recommend
 
-### 2. 批量导入资源
+### 3. 批量导入资源
 
 - 按行/文件读取源数据
 - 逐条映射到 Resource 结构
 - 注意 API 限速：每 Key 60次/60秒
 - 全部写入后 `GET /api/resources` 验证
 
-### 3. 为资源补充下载链接
+### 4. 为资源补充下载链接
 
 1. `POST /api/resources-info` 获取现有数据
 2. 合并新字段（不覆盖已有）
 3. `PATCH /api/resources/:uuid` 只传变更字段
 
-### 4. 配置首页推荐
+### 5. 配置首页推荐
 
 1. `GET /api/list` 看当前展现
 2. `GET /api/resources` 挑资源
 3. `POST /api/list/override` 设置 recommend 的 pinned 列表
+
+## 常见错误
+
+| 错误做法 | 后果 | 正确做法 |
+|---------|------|---------|
+| 创建分类后 PUT 改 `link` 为英文字段（如 `/dev`） | 前端 `/category/<link>` 路由不匹配 → **404** | 创建时定好 name，link 交服务端自动生成 |
+| 分类名包含 `/`（如 `"设计/建模"`） | 后续 PUT/DELETE 的 path 参数校验失败，无法操作 | 避免 `/`，改用 `设计建模` 或 `设计与建模` |
+| 删除根分类 | 级联删除所有子分类，不可恢复 | 删除前先 GET 确认子树内容 |
+| 批量请求太快 | `429 Too Many Requests` | 每 Key 60次/60秒，控制并发（建议串行 + 1秒间隔） |
 
 ## 故障排查
 

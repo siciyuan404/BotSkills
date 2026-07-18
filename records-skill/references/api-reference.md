@@ -8,12 +8,17 @@
 
 ## 分类树 /api/categories
 
+> ⚠️ `link` 字段特殊行为：
+> - **POST 时传了也无效**，服务端始终以 `/<name>` 自动生成
+> - **PUT 时传了被忽略**，无法通过 API 修改 link
+> - 前端路由为 `/category/<link>`，手动改动会导致 404
+
 | 方法 | 路径 | 认证 | 请求体 | 返回 |
 |------|------|------|--------|------|
 | GET | `/api/categories` | 公开 | — | `Record<string, CategoryData>` 嵌套树 |
-| POST | `/api/categories` | 🔒 | `{path, name, icon?, link?}` | 创建的分类节点 |
-| PUT | `/api/categories` | 🔒 | `{path, name, icon?, link?}` | 更新后的节点 |
-| DELETE | `/api/categories` | 🔒 | `{path}` | 删除确认 |
+| POST | `/api/categories` | 🔒 | `{path, name, icon?}` | 创建的节点（link 自动生成） |
+| PUT | `/api/categories` | 🔒 | `{path, name, icon?}` | 更新后的节点（link 不可改） |
+| DELETE | `/api/categories` | 🔒 | `{path}` | 删除确认（级联删除） |
 | PATCH | `/api/categories` | 🔒 | `{sourcePath, targetPath, position}` | 移动确认 |
 
 ## 资源 /api/resources

@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "我在 Records 部署了一个资源站 https://my-records.example.com，API Key 是 rak_a1b2c3d4e5f6...（完整 key）。现在需要在「工具/开发」分类下新建一个子分类叫「AI 编程助手」，图标用 RiRobot，然后在这个分类下添加一个 VS Code 扩展包资源，包含图片和百度网盘下载链接。帮我完成整个流程。",
-      "expected_output": "通过 curl 调用分类 API 创建子分类，构造 Resource JSON，调用资源 API 创建资源",
+      "expected_output": "创建分类时不传 link 参数，使用 POST 创建子分类；构造 Resource JSON，调用 POST /api/resources/:uuid 创建资源",
       "files": []
     },
     {
@@ -17,6 +17,12 @@
       "id": 3,
       "prompt": "RECORDS_API_BASE=https://records.example.com，RECORDS_API_KEY=rak_xxx...。帮我把首页热榜置顶 uuid1 和 uuid2，排除 uuid3，限制显示 30 条，同时把 recommend 列表清空重配为只包含 uuid4 和 uuid5。",
       "expected_output": "POST /api/list/override 分别配置 hot 和 recommend 的 override",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Records 站 https://records.example.com，API Key 是 rak_xxx...。已有的分类树中，根分类「编程开发」的 link 是 /编程开发，我想把它改成 /dev 让 URL 更简洁，同时把子分类「DevOps」的 link 改成 /devops。帮我实现。",
+      "expected_output": "说明 link 字段不可通过 API 修改（PUT 忽略该字段），告知用户正确的做法是创建时定好 name、link 交服务端自动生成，前端会用百分比编码处理中文 URL",
       "files": []
     }
   ]
