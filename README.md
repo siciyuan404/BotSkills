@@ -38,12 +38,13 @@ curl -fsSL https://raw.githubusercontent.com/siciyuan404/BotSkills/main/install.
 
 | Skill | Description | Dependencies |
 |-------|-------------|-------------|
+| [cangjie-skill](./cangjie-skill/) | Distill a book, long-video transcript, podcast, course, or interview into a cohe | — |
+| [cloudflared](./cloudflared/) | Complete Cloudflare Tunnel (cloudflared) management for exposing local services  | — |
 | [flutter-gh-starter](./flutter-gh-starter/) | Primary skill for bootstrapping a Flutter mobile project and managing it as an o | — |
 | [rclone](./rclone/) | Comprehensive rclone control for MinIO and cloud storage operations. Use when th | — |
+| [records-skill](./records-skill/) | Records 资源管理系统远程运维。纯 HTTP API 客户端模式，仅需配置 `$RECORDS_API_BASE`（部署域名）和 `$RECORDS_AP | — |
+| [software-update](./software-update/) | Implement auto-update, self-update, OTA, and release-distribution features for d | — |
 | [telegram-editor](./telegram-editor/) | Telegram Bot message editing and push management skill. Provides capabilities fo | — |
-| [cloudflared](./cloudflared/) | Complete Cloudflare Tunnel (cloudflared) management for exposing local services through Cloudflare. | cloudflared |
-| [cangjie-skill](./cangjie-skill/) | Distill books/videos/podcasts into executable agent skills | — |
-| [software-update](./software-update/) | Auto-update/self-update/OTA for desktop, server, Docker apps | — |
 
 ## 添加新 Skill
 

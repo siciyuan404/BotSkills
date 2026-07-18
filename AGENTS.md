@@ -13,6 +13,7 @@
 | [flutter-gh-starter](flutter-gh-starter/SKILL.md) | Flutter 项目初始化 + GitHub 管理（gh CLI） |
 | [telegram-editor](telegram-editor/SKILL.md) | Telegram Bot 消息编辑、模板和推送管理 |
 | [cangjie-skill](cangjie-skill/SKILL.md) | 将书籍/视频/播客蒸馏为可执行 agent 技能 |
+| [records-skill](records-skill/SKILL.md) | Records 资源管理系统远程运维：通过 API 管理资源/分类 CRUD、R2 OSS 文件、API Key、榜单配置 |
 | [software-update](software-update/SKILL.md) | 桌面端、服务端、Docker 应用的自动更新/OTA |
 
 ## 技能目录结构

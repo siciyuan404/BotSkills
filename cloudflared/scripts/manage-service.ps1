@@ -39,6 +39,11 @@ switch ($Action) {
     $svc = New-Service -Name $serviceName -BinaryPathName $binPath -DisplayName "Cloudflare Tunnel" -StartupType Automatic 2>&1
     if ($?) {
       Write-OK "服务已创建"
+
+      # Switch to delayed-auto to prevent boot-time DNS failure
+      sc.exe config $serviceName start= delayed-auto 2>$null
+      if ($?) { Write-Info "启动类型: delayed-auto (开机延迟启动)" }
+
       Start-Service $serviceName 2>$null
       if ($?) { Write-OK "服务已启动" }
     } else {

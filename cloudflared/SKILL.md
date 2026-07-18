@@ -137,6 +137,8 @@ cloudflared tunnel route dns <tunnel-name> <hostname>
 
 **⚠ `cloudflared service install` creates a generic agent that does NOT automatically connect to your tunnel.** Always use the custom service method below.
 
+**⚠ Use `delayed-auto` (not `Automatic`):** `Automatic` starts the service at boot when network/DNS may not be ready, causing failure (`No DNS servers configured for local system`). `delayed-auto` starts after network is initialized — preventing this issue.
+
 ### Install Service (Correct Way)
 
 ```powershell
@@ -144,14 +146,19 @@ cloudflared tunnel route dns <tunnel-name> <hostname>
 $binPath = "cloudflared.exe tunnel --config $env:USERPROFILE\.cloudflared\config.yml run"
 New-Service -Name cloudflared -BinaryPathName $binPath -DisplayName "Cloudflare Tunnel" -StartupType Automatic
 
+# Switch to delayed-auto to prevent boot-time DNS failure
+sc.exe config cloudflared start= delayed-auto
+
 # Start
 Start-Service cloudflared
 
 # Or one-liner:
-sc.exe create cloudflared binPath= "cloudflared.exe tunnel --config C:\Users\MyUser\.cloudflared\config.yml run" start= auto displayname= "Cloudflare Tunnel"
+sc.exe create cloudflared binPath= "cloudflared.exe tunnel --config C:\Users\MyUser\.cloudflared\config.yml run" start= delayed-auto displayname= "Cloudflare Tunnel"
 ```
 
 **Why this works:** `--config` must come BEFORE the `run` subcommand. `cloudflared tunnel run --config path` fails with "flag provided but not defined". The correct order is `cloudflared tunnel --config path run`.
+
+**Why `delayed-auto`:** The service waits until the `Automatic` (non-delayed) services have started and the network stack is fully initialized. This prevents the `No DNS servers configured for local system` error that occurs when cloudflared starts too early during boot.
 
 ### Service Management
 
@@ -236,6 +243,7 @@ Test-NetConnection -ComputerName localhost -Port 3080
 | `failed to dial to edge with quic: timeout` | UDP/QUIC blocked by firewall or proxy | Auto-fallback to HTTP/2 — check precheck output |
 | `cloudflared service install` creates agent that doesn't connect | Generic agent doesn't read config.yml | Use `New-Service` with `tunnel --config path run` |
 | `flag provided but not defined: -config` | `--config` placed after `run` | Correct: `cloudflared tunnel --config path run` |
+| `lookup argotunnel.com: dnsquery: No DNS servers configured for local system` | Service starts at boot before DNS is ready | Change startup to `delayed-auto`: `sc.exe config cloudflared start= delayed-auto` |
 | `ERR 1033` | Argo Smart Routing / edge connection | Check tunnel connections in dashboard |
 | `530` / `error code: 1033` via browser | No active tunnel connection | Check service and tunnel connections |
 | `connection timeout` | Local service not running | Start your local server on the expected port |
@@ -247,6 +255,46 @@ Get-Content "$env:USERPROFILE\.cloudflared\tunnel.log" -Tail 50
 
 # Foreground test with verbose output
 cloudflared tunnel --config ~\.cloudflared\config.yml run
+```
+
+### Service Won't Start After Reboot
+
+Most common cause: service set to `Automatic` starts before DNS is ready.
+
+**Recovery steps:**
+
+```powershell
+# 1. Check service state
+sc.exe query cloudflared
+
+# 2. Check tunnel connections
+cloudflared tunnel list
+
+# 3. Check logs for the specific error
+Get-Content "$env:USERPROFILE\.cloudflared\tunnel.log" -Tail 50
+
+# 4. Verify local service is running
+Test-NetConnection -ComputerName localhost -Port <your-port>
+
+# 5. If error is "No DNS servers configured" — try starting again (DNS is ready now)
+Start-Service cloudflared
+# If access denied (non-admin), use Start-Process with RunAs:
+Start-Process powershell -Verb RunAs -ArgumentList "Start-Service cloudflared"
+
+# 6. Prevent recurrence — switch to delayed-auto
+sc.exe config cloudflared start= delayed-auto
+```
+
+If `Start-Service cloudflared` still fails after DNS is available, try foreground test:
+
+```powershell
+cloudflared tunnel --config "$env:USERPROFILE\.cloudflared\config.yml" run
+```
+
+If foreground works but service won't, the binary path may be wrong. Fix with:
+
+```powershell
+sc.exe config cloudflared binPath= "cloudflared.exe tunnel --config $env:USERPROFILE\.cloudflared\config.yml run"
 ```
 
 ### Pre-checks (Connectivity Diagnostics)
@@ -297,7 +345,10 @@ cloudflared tunnel route dns my-app-tunnel app.yourdomain.com
 $binPath = "cloudflared.exe tunnel --config $env:USERPROFILE\.cloudflared\config.yml run"
 New-Service -Name cloudflared -BinaryPathName $binPath -DisplayName "Cloudflare Tunnel" -StartupType Automatic
 
-# 6. Start
+# 6. Switch to delayed-auto (prevent boot-time DNS failure)
+sc.exe config cloudflared start= delayed-auto
+
+# 7. Start
 Start-Service cloudflared
 ```
 
@@ -341,3 +392,4 @@ ingress:
 - `cloudflared tunnel route dns` is idempotent — safe to re-run
 - DNS routing and ingress rules are separate: DNS points the hostname to the tunnel, ingress routes it to a local service
 - When stuck, `taskkill /F /IM cloudflared.exe` is the nuclear option — always works
+- **Use `delayed-auto` startup** — prevents boot-time DNS failure (`No DNS servers configured`). Set with `sc.exe config cloudflared start= delayed-auto`

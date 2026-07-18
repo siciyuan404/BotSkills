@@ -1,8 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0",
-  "updated": "2026-07-17T05:50:00+08:00",
+  "updated": "2026-07-17T17:58:44+08:00",
   "skills": [
+    {
+      "name": "cangjie-skill",
+      "description": "Distill a book, long-video transcript, podcast, course, or interview into a coherent set of executable skills. Use when the user asks to 拆书 / 蒸馏一本书 / 把 XX 书做成 skill / 把这个视频/播客/课程蒸馏成 skill / turn a book or video into skills — i.e. wants the frameworks, principles, and methodologies in long-form content extracted into atomic, reusable Claude skills that an agent can invoke in real-world situations. NOT for simple summarization, book reviews, or role-playing as the author (that is nuwa-skills job).",
+      "path": "cangjie-skill/",
+      "dependencies": []
+    },
+    {
+      "name": "cloudflared",
+      "description": "Complete Cloudflare Tunnel (cloudflared) management for exposing local services to the internet. Use this skill whenever the user mentions Cloudflare tunnels, cloudflared, exposing local services, making localhost accessible from the internet, tunnel setup, ingress configuration, Cloudflare Access, `cloudflared tunnel` commands, or anything related to connecting local servers through Cloudflares network. Also triggers when the user wants to secure local services, set up authentication for internal tools, or create persistent tunnels to Cloudflare. This is the go-to skill for all cloudflared operations — tunnel creation, DNS routing, ingress rules, running tunnels as services, and managing Access policies.",
+      "path": "cloudflared/",
+      "dependencies": []
+    },
     {
       "name": "flutter-gh-starter",
       "description": "Primary skill for bootstrapping a Flutter mobile project and managing it as an open-source GitHub repository via gh CLI. Activate when the user wants to create a Flutter app, set up Flutter/gh CLI environment, initialize a git repository, configure open-source files (LICENSE/README/.gitignore), or push code to GitHub. Provides environment provisioning (China mirror aware), project scaffolding, env-var (.env + flutter_dotenv) integration, and sub-scenario routing to specialized references in the references/ directory.",
@@ -16,29 +28,21 @@
       "dependencies": []
     },
     {
-      "name": "telegram-editor",
-      "description": "Telegram Bot message editing and push management skill. Provides capabilities for editing message content, previewing messages before sending, managing message templates, and pushing messages to Telegram channels or groups.",
-      "path": "telegram-editor/",
-      "dependencies": []
-    },
-    {
-      "name": "cloudflared",
-      "description": "Complete Cloudflare Tunnel (cloudflared) management for exposing local services through Cloudflare. Use whenever the user mentions Cloudflare tunnels, cloudflared, exposing local services, making localhost accessible from the internet, tunnel setup, ingress configuration, or Cloudflare Access.",
-      "path": "cloudflared/",
-      "dependencies": [
-        "cloudflared"
-      ]
-    },
-    {
-      "name": "cangjie-skill",
-      "description": "Distill a book, long-video transcript, podcast, course, or interview into a coherent set of executable skills. Use when the user asks to distill a book/video/podcast into skills — i.e. wants frameworks, principles, and methodologies extracted into atomic, reusable skills.",
-      "path": "cangjie-skill/",
+      "name": "records-skill",
+      "description": "Records 资源管理系统远程运维。纯 HTTP API 客户端模式，仅需配置 `$RECORDS_API_BASE`（部署域名）和 `$RECORDS_API_KEY`（API Key），无需本地项目代码。支持：分类树 CRUD、资源 CRUD、 Cloudflare R2 存储文件管理、API Key 签发与吊销、榜单（hot/latest/recommend/top）配置、 站点设置读写。当用户提到 Records、资源管理站、分类树配置、添加/编辑资源、 R2 存储文件操作、API Key 管理、热门/推荐/最新榜单设置时使用。",
+      "path": "records-skill/",
       "dependencies": []
     },
     {
       "name": "software-update",
-      "description": "Implement auto-update, self-update, OTA, and release-distribution features for desktop, server, and Docker applications. Use when user asks about adding update mechanisms, version checking, atomic replacement, rollback, or restart-after-update.",
+      "description": "Implement auto-update, self-update, OTA, and release-distribution features for desktop, server, and Docker applications in any language or framework. Use this skill whenever the user asks about adding an update mechanism, checking for new versions, downloading and installing updates, atomic file replacement, rollback strategies, restart-after-update, or progress tracking for an update flow — even if they don't explicitly say \"auto-update\" or \"self-update.\" Covers Electron, Tauri, native (C/C++/Rust/Go), and server/Docker deployment patterns.",
       "path": "software-update/",
+      "dependencies": []
+    },
+    {
+      "name": "telegram-editor",
+      "description": "Telegram Bot message editing and push management skill. Provides capabilities for editing message content, previewing messages before sending, managing message templates, and pushing messages to Telegram channels or groups.",
+      "path": "telegram-editor/",
       "dependencies": []
     }
   ]

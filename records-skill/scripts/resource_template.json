@@ -1,0 +1,22 @@
+{
+  "_comment": "Resource 创建模板 — 填写后通过 records_api.py resources create 提交",
+  "name": "",
+  "category": "工具/开发",
+  "images": [],
+  "tags": [],
+  "source_links": {
+    "baidu": {
+      "link": "",
+      "psw": "",
+      "size": ""
+    }
+  },
+  "uploaded": 1700000000000,
+  "update_time": 1700000000000,
+  "introduction": "",
+  "resource_information": {},
+  "download_count": 0,
+  "download_limit": 10,
+  "link": "",
+  "rating": 0
+}

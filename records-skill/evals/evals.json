@@ -1,0 +1,23 @@
+{
+  "skill_name": "records-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我在 Records 部署了一个资源站 https://my-records.example.com，API Key 是 rak_a1b2c3d4e5f6...（完整 key）。现在需要在「工具/开发」分类下新建一个子分类叫「AI 编程助手」，图标用 RiRobot，然后在这个分类下添加一个 VS Code 扩展包资源，包含图片和百度网盘下载链接。帮我完成整个流程。",
+      "expected_output": "通过 curl 调用分类 API 创建子分类，构造 Resource JSON，调用资源 API 创建资源",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Records 站 https://records.example.com 的 API Key 是 rak_xxx...。帮我列出 R2 存储中 images/ 目录下的所有文件，然后生成其中 cover.png 的签名下载链接（有效期 2 小时）。",
+      "expected_output": "说明 R2 存储 API 需要 JWT Cookie 认证，提供获取签名 URL 的替代方案或建议",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "RECORDS_API_BASE=https://records.example.com，RECORDS_API_KEY=rak_xxx...。帮我把首页热榜置顶 uuid1 和 uuid2，排除 uuid3，限制显示 30 条，同时把 recommend 列表清空重配为只包含 uuid4 和 uuid5。",
+      "expected_output": "POST /api/list/override 分别配置 hot 和 recommend 的 override",
+      "files": []
+    }
+  ]
+}
